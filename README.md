@@ -1,35 +1,47 @@
-# SysWidget
+# SysWidget (Rust)
 
-A small floating desktop widget for Windows 11 showing CPU load + temperature,
-GPU load + temperature + VRAM, and RAM usage. Updates every 1.5 s.
+Tiny desktop widget for Windows 11: CPU load + temperature, NVIDIA GPU load +
+temperature + VRAM, and RAM usage. Single ~350 KB exe, no runtime needed.
 
-## Build (once)
+Built for an Intel CPU + NVIDIA GPU laptop (ASUS TUF F16).
 
-1. Install the .NET 8 SDK:            `winget install Microsoft.DotNet.SDK.8`
-2. (Optional, for an installer) Inno Setup: `winget install JRSoftware.InnoSetup`
-3. In this folder, in PowerShell:     `powershell -ExecutionPolicy Bypass -File .\build.ps1`
+## Build (GitHub Actions)
 
-Output:
-- `publish\SysWidget.exe` - portable, runs as-is (no .NET needed on the PC)
-- `dist\SysWidget-Setup.exe` - installer (if Inno Setup is installed)
+1. Push this folder's contents to a GitHub repo (Cargo.toml at the repo root).
+2. Actions -> Build SysWidget runs on every push (or use "Run workflow").
+3. Open the finished run and download the **SysWidget** artifact (a zip with `SysWidget.exe`).
 
-## Use
+## Install
 
-- Drag the widget anywhere; the position is remembered.
-- Tray icon (right-click): Show/hide, Always on top, Start with Windows, Reset position, Exit.
-- It asks for admin (UAC) because CPU temperature sensors need it. "Start with Windows"
-  creates a Task Scheduler logon task, so there is no UAC prompt at login.
+1. Exit and uninstall the old .NET SysWidget first (Settings -> Apps).
+2. Put `SysWidget.exe` somewhere permanent, e.g. `C:\Program Files\SysWidget\`.
+3. Run it (it asks for admin - needed for the CPU temperature driver).
+4. Right-click the widget or tray icon -> **Start with Windows**.
+   If you move the exe later, turn this off and on again.
 
-## CPU temperature shows "--"
+Windows SmartScreen may warn because the exe isn't signed: More info -> Run anyway.
 
-Reading CPU temperature needs the PawnIO kernel driver (the signed, modern replacement
-for WinRing0 that LibreHardwareMonitor uses). Install it from https://pawnio.eu, then
-restart the widget. GPU temperature (NVIDIA/AMD) and RAM work without it.
+## Behaviour
+
+- Drag anywhere; position is remembered (`HKCU\Software\SysWidget`).
+- Right-click the widget or the tray icon: show/hide, always on top, start with
+  Windows, reset position, exit. Double-click the tray icon to show/hide.
+- **On battery** GPU readings pause and NVIDIA's library is shut down, so the
+  RTX GPU can power off.
+- **Eco mode** (Armoury Crate) turns the GPU off; the widget shows
+  "Not available" and checks again every 30 s.
+- Nothing is read while the widget is hidden.
+
+## Requirements on the PC
+
+- PawnIO driver (https://pawnio.eu) for CPU temperature.
+- NVIDIA driver (provides `nvml.dll`).
 
 ## Files
 
-- `HardwareMonitor.cs` - sensor reading (LibreHardwareMonitorLib + Windows RAM API)
-- `MainWindow.xaml(.cs)` - the widget UI
-- `App.xaml.cs` - tray icon and menu
-- `Autostart.cs` - start-with-Windows scheduled task
-- `Settings.cs` - saves position/options to `%APPDATA%\SysWidget\settings.json`
+- `src/main.rs` - window, drawing, tray and menu
+- `src/sensors.rs` - CPU load, RAM, battery, CPU name (Windows APIs)
+- `src/pawnio.rs` - Intel CPU package temperature via PawnIO
+- `src/nvml.rs` - NVIDIA GPU via NVML
+- `src/settings.rs` - saved settings and the start-with-Windows task
+- `pawnio/IntelMSR.bin` - signed PawnIO module (LGPL-2.1, see `pawnio/COPYING`)
