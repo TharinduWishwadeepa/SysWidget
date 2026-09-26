@@ -1,0 +1,104 @@
+<Window x:Class="SysWidget.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SysWidget"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" ResizeMode="NoResize" SizeToContent="WidthAndHeight"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        TextOptions.TextFormattingMode="Display"
+        MouseLeftButtonDown="OnDrag">
+
+    <Window.Resources>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#9AA1AB"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="Device" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#6E7681"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="MaxWidth" Value="180"/>
+        </Style>
+        <Style x:Key="Big" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#F0F3F6"/>
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="TempText" TargetType="TextBlock" BasedOn="{StaticResource Big}">
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Bottom"/>
+            <Setter Property="Margin" Value="0,0,0,3"/>
+        </Style>
+        <Style x:Key="Detail" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#6E7681"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Margin" Value="0,5,0,0"/>
+        </Style>
+        <Style x:Key="Track" TargetType="Border">
+            <Setter Property="Height" Value="5"/>
+            <Setter Property="CornerRadius" Value="2.5"/>
+            <Setter Property="Background" Value="#26FFFFFF"/>
+        </Style>
+        <Style x:Key="Fill" TargetType="Border">
+            <Setter Property="Height" Value="5"/>
+            <Setter Property="CornerRadius" Value="2.5"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Width" Value="0"/>
+        </Style>
+    </Window.Resources>
+
+    <Border Width="280" Margin="6" Padding="16,14,16,12" CornerRadius="14"
+            Background="#EB16181D" BorderBrush="#2EFFFFFF" BorderThickness="1">
+        <StackPanel>
+
+            <!-- CPU -->
+            <Grid Margin="0,0,0,14">
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                <TextBlock Text="CPU" Style="{StaticResource Label}"/>
+                <TextBlock x:Name="CpuName" Grid.Column="1" Style="{StaticResource Device}"/>
+                <TextBlock x:Name="CpuLoad" Grid.Row="1" Text="--" Style="{StaticResource Big}"/>
+                <TextBlock x:Name="CpuTemp" Grid.Row="1" Grid.Column="1" Text="--°C" Style="{StaticResource TempText}"/>
+                <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="0,4,0,0">
+                    <Border Style="{StaticResource Track}"/>
+                    <Border x:Name="CpuBar" Style="{StaticResource Fill}" Background="#4CC2FF"/>
+                </Grid>
+            </Grid>
+
+            <!-- GPU -->
+            <Grid x:Name="GpuSection" Margin="0,0,0,14">
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                <TextBlock Text="GPU" Style="{StaticResource Label}"/>
+                <TextBlock x:Name="GpuName" Grid.Column="1" Style="{StaticResource Device}"/>
+                <TextBlock x:Name="GpuLoad" Grid.Row="1" Text="--" Style="{StaticResource Big}"/>
+                <TextBlock x:Name="GpuTemp" Grid.Row="1" Grid.Column="1" Text="--°C" Style="{StaticResource TempText}"/>
+                <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="0,4,0,0">
+                    <Border Style="{StaticResource Track}"/>
+                    <Border x:Name="GpuBar" Style="{StaticResource Fill}" Background="#7EE787"/>
+                </Grid>
+                <TextBlock x:Name="GpuDetail" Grid.Row="3" Grid.ColumnSpan="2" Style="{StaticResource Detail}"/>
+            </Grid>
+
+            <!-- RAM -->
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                <TextBlock Text="MEMORY" Style="{StaticResource Label}"/>
+                <TextBlock x:Name="RamLoad" Grid.Row="1" Text="--" Style="{StaticResource Big}"/>
+                <TextBlock x:Name="RamDetail" Grid.Row="1" Grid.Column="1" Text="" Style="{StaticResource TempText}"
+                           FontSize="14" Foreground="#9AA1AB"/>
+                <Grid Grid.Row="2" Grid.ColumnSpan="2" Margin="0,4,0,0">
+                    <Border Style="{StaticResource Track}"/>
+                    <Border x:Name="RamBar" Style="{StaticResource Fill}" Background="#D2A8FF"/>
+                </Grid>
+            </Grid>
+
+            <TextBlock x:Name="Hint" Visibility="Collapsed" Margin="0,10,0,0" TextWrapping="Wrap"
+                       FontSize="10.5" Foreground="#D29922"/>
+        </StackPanel>
+    </Border>
+</Window>

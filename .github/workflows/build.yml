@@ -1,0 +1,28 @@
+name: Build SysWidget
+
+on:
+  push:
+  workflow_dispatch:   # adds a "Run workflow" button in the Actions tab
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build exe + installer
+        run: ./build.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SysWidget
+          path: |
+            publish/SysWidget.exe
+            dist/SysWidget-Setup.exe
