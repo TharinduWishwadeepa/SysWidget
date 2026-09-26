@@ -1,7 +1,10 @@
 //! NVIDIA GPU readings via NVML (nvml.dll ships with the NVIDIA driver).
 //!
-//! NVML is shut down while on battery so the GPU can power off (Optimus laptops),
-//! and init is retried every 30 s while the GPU is unavailable (e.g. ASUS Eco mode).
+//! - Each value (load, temperature, VRAM) is read separately, so one failing
+//!   call doesn't hide the others.
+//! - NVML is shut down while on battery so the GPU can power off (Optimus laptops).
+//! - If the GPU can't be reached (ASUS Eco mode) or returns nothing (asleep),
+//!   it is retried every 5 s.
 
 use std::ffi::c_void;
 use std::ptr::null_mut;
@@ -10,9 +13,10 @@ use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryExW, 
 
 use crate::wide;
 
-const RETRY_EVERY: Duration = Duration::from_secs(30);
+const RETRY_EVERY: Duration = Duration::from_secs(5);
 const NVML_SUCCESS: i32 = 0;
 const NVML_TEMPERATURE_GPU: u32 = 0;
+const GB: f32 = 1024.0 * 1024.0 * 1024.0;
 
 type Device = *mut c_void;
 
@@ -25,21 +29,53 @@ struct Utilization {
 
 #[repr(C)]
 #[derive(Default)]
-struct Memory {
+struct MemoryV1 {
     total: u64,
     free: u64,
     used: u64,
 }
 
+#[repr(C)]
+#[derive(Default)]
+struct MemoryV2 {
+    version: u32,
+    total: u64,
+    reserved: u64,
+    free: u64,
+    used: u64,
+}
+
+#[repr(C)]
+#[derive(Default)]
+struct TemperatureV1 {
+    version: u32,
+    sensor_type: u32,
+    temperature: i32,
+}
+
+/// NVML_STRUCT_VERSION(type, ver) = sizeof(type) | (ver << 24)
+const fn struct_version<T>(ver: u32) -> u32 {
+    std::mem::size_of::<T>() as u32 | (ver << 24)
+}
+
+type Fn0 = unsafe extern "C" fn() -> i32;
+
 #[derive(Clone, Copy)]
 struct Api {
-    init: unsafe extern "C" fn() -> i32,
-    shutdown: unsafe extern "C" fn() -> i32,
+    init: Fn0,
+    shutdown: Fn0,
     handle_by_index: unsafe extern "C" fn(u32, *mut Device) -> i32,
     name: unsafe extern "C" fn(Device, *mut u8, u32) -> i32,
-    utilization: unsafe extern "C" fn(Device, *mut Utilization) -> i32,
-    temperature: unsafe extern "C" fn(Device, u32, *mut u32) -> i32,
-    memory: unsafe extern "C" fn(Device, *mut Memory) -> i32,
+    // Optional: newer/older drivers may only export some of these.
+    utilization: Option<unsafe extern "C" fn(Device, *mut Utilization) -> i32>,
+    temperature: Option<unsafe extern "C" fn(Device, u32, *mut u32) -> i32>,
+    temperature_v: Option<unsafe extern "C" fn(Device, *mut TemperatureV1) -> i32>,
+    memory: Option<unsafe extern "C" fn(Device, *mut MemoryV1) -> i32>,
+    memory_v2: Option<unsafe extern "C" fn(Device, *mut MemoryV2) -> i32>,
+}
+
+unsafe fn cast<T: Copy>(f: unsafe extern "system" fn() -> isize) -> T {
+    std::mem::transmute_copy(&f)
 }
 
 impl Api {
@@ -55,28 +91,68 @@ impl Api {
             if lib.is_null() {
                 return None;
             }
-            macro_rules! sym {
-                ($name:literal) => {
-                    std::mem::transmute(GetProcAddress(lib, concat!($name, "\0").as_ptr())?)
-                };
-            }
+            let sym = |name: &str| GetProcAddress(lib, format!("{name}\0").as_ptr());
             Some(Api {
-                init: sym!("nvmlInit_v2"),
-                shutdown: sym!("nvmlShutdown"),
-                handle_by_index: sym!("nvmlDeviceGetHandleByIndex_v2"),
-                name: sym!("nvmlDeviceGetName"),
-                utilization: sym!("nvmlDeviceGetUtilizationRates"),
-                temperature: sym!("nvmlDeviceGetTemperature"),
-                memory: sym!("nvmlDeviceGetMemoryInfo"),
+                init: cast(sym("nvmlInit_v2")?),
+                shutdown: cast(sym("nvmlShutdown")?),
+                handle_by_index: cast(sym("nvmlDeviceGetHandleByIndex_v2")?),
+                name: cast(sym("nvmlDeviceGetName")?),
+                utilization: sym("nvmlDeviceGetUtilizationRates").map(|f| cast(f)),
+                temperature: sym("nvmlDeviceGetTemperature").map(|f| cast(f)),
+                temperature_v: sym("nvmlDeviceGetTemperatureV").map(|f| cast(f)),
+                memory: sym("nvmlDeviceGetMemoryInfo").map(|f| cast(f)),
+                memory_v2: sym("nvmlDeviceGetMemoryInfo_v2").map(|f| cast(f)),
             })
         }
+    }
+
+    unsafe fn load_pct(&self, d: Device) -> Option<f32> {
+        let mut u = Utilization::default();
+        (self.utilization?(d, &mut u) == NVML_SUCCESS).then_some(u.gpu as f32)
+    }
+
+    unsafe fn temp(&self, d: Device) -> Option<f32> {
+        let mut t = 0u32;
+        if let Some(f) = self.temperature {
+            if f(d, NVML_TEMPERATURE_GPU, &mut t) == NVML_SUCCESS && t > 0 {
+                return Some(t as f32);
+            }
+        }
+        let mut tv = TemperatureV1 { version: struct_version::<TemperatureV1>(1), ..Default::default() };
+        if let Some(f) = self.temperature_v {
+            if f(d, &mut tv) == NVML_SUCCESS && tv.temperature > 0 {
+                return Some(tv.temperature as f32);
+            }
+        }
+        None
+    }
+
+    /// (used GB, total GB)
+    unsafe fn vram(&self, d: Device) -> Option<(f32, f32)> {
+        let mut m = MemoryV1::default();
+        if let Some(f) = self.memory {
+            if f(d, &mut m) == NVML_SUCCESS && m.total > 0 {
+                return Some((m.used as f32 / GB, m.total as f32 / GB));
+            }
+        }
+        let mut m2 = MemoryV2 { version: struct_version::<MemoryV2>(2), ..Default::default() };
+        if let Some(f) = self.memory_v2 {
+            if f(d, &mut m2) == NVML_SUCCESS && m2.total > 0 {
+                return Some((m2.used as f32 / GB, m2.total as f32 / GB));
+            }
+        }
+        None
     }
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum GpuReading {
-    Active { load: f32, temp: f32, vram_used_gb: f32, vram_total_gb: f32 },
+    /// Any value that couldn't be read is None and shown as "--".
+    Active { load: Option<f32>, temp: Option<f32>, vram: Option<(f32, f32)> },
+    /// Driver reachable but reporting nothing - GPU powered down while idle.
+    Sleeping,
     PausedOnBattery,
+    /// No NVIDIA driver, or GPU switched off (Eco mode).
     Unavailable,
 }
 
@@ -85,11 +161,18 @@ pub struct Gpu {
     device: Option<Device>,
     pub name: String,
     retry_at: Instant,
+    waiting: GpuReading, // shown until the next retry
 }
 
 impl Gpu {
     pub fn new() -> Self {
-        Gpu { api: Api::load(), device: None, name: String::new(), retry_at: Instant::now() }
+        Gpu {
+            api: Api::load(),
+            device: None,
+            name: String::new(),
+            retry_at: Instant::now(),
+            waiting: GpuReading::Unavailable,
+        }
     }
 
     pub fn poll(&mut self, on_battery: bool) -> GpuReading {
@@ -104,38 +187,27 @@ impl Gpu {
             Some(d) => d,
             None => {
                 if Instant::now() < self.retry_at {
-                    return GpuReading::Unavailable;
+                    return self.waiting;
                 }
                 match self.start(api) {
                     Some(d) => d,
-                    None => {
-                        self.retry_at = Instant::now() + RETRY_EVERY;
-                        return GpuReading::Unavailable;
-                    }
+                    None => return self.retry_later(GpuReading::Unavailable),
                 }
             }
         };
 
-        let (mut util, mut temp, mut mem) = (Utilization::default(), 0u32, Memory::default());
-        let ok = unsafe {
-            (api.utilization)(device, &mut util) == NVML_SUCCESS
-                && (api.temperature)(device, NVML_TEMPERATURE_GPU, &mut temp) == NVML_SUCCESS
-                && (api.memory)(device, &mut mem) == NVML_SUCCESS
-        };
-        if !ok {
-            // GPU switched off (Eco mode) or driver reset - try again later.
+        let (load, temp, vram) = unsafe { (api.load_pct(device), api.temp(device), api.vram(device)) };
+        if load.is_none() && temp.is_none() && vram.is_none() {
             self.stop();
-            self.retry_at = Instant::now() + RETRY_EVERY;
-            return GpuReading::Unavailable;
+            return self.retry_later(GpuReading::Sleeping);
         }
+        GpuReading::Active { load, temp, vram }
+    }
 
-        const GB: f32 = 1024.0 * 1024.0 * 1024.0;
-        GpuReading::Active {
-            load: util.gpu as f32,
-            temp: temp as f32,
-            vram_used_gb: mem.used as f32 / GB,
-            vram_total_gb: mem.total as f32 / GB,
-        }
+    fn retry_later(&mut self, state: GpuReading) -> GpuReading {
+        self.waiting = state;
+        self.retry_at = Instant::now() + RETRY_EVERY;
+        state
     }
 
     fn start(&mut self, api: Api) -> Option<Device> {

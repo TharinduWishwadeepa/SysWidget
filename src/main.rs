@@ -397,11 +397,15 @@ unsafe fn paint(st: &State, dc: HDC, w: i32, h: i32) {
 
     let gpu_name = if st.gpu.name.is_empty() { "NVIDIA GPU" } else { st.gpu.name.as_str() };
     let (load, temp, detail) = match st.gpu_reading {
-        GpuReading::Active { load, temp, vram_used_gb, vram_total_gb } => (
-            Some(load),
-            Some(temp),
-            format!("VRAM  {vram_used_gb:.1} / {vram_total_gb:.1} GB"),
+        GpuReading::Active { load, temp, vram } => (
+            load,
+            temp,
+            match vram {
+                Some((used, total)) => format!("VRAM  {used:.1} / {total:.1} GB"),
+                None => "VRAM  --".to_string(),
+            },
         ),
+        GpuReading::Sleeping => (None, None, "Sleeping (idle)".to_string()),
         GpuReading::PausedOnBattery => (None, None, "Paused on battery".to_string()),
         GpuReading::Unavailable => (None, None, "Not available (GPU off / Eco mode)".to_string()),
     };

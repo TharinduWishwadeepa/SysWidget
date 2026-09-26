@@ -29,7 +29,10 @@ Windows SmartScreen may warn because the exe isn't signed: More info -> Run anyw
 - **On battery** GPU readings pause and NVIDIA's library is shut down, so the
   RTX GPU can power off.
 - **Eco mode** (Armoury Crate) turns the GPU off; the widget shows
-  "Not available" and checks again every 30 s.
+  "Not available" and checks again every 5 s.
+- When the GPU is idle and powered down it shows "Sleeping (idle)".
+- GPU load, temperature and VRAM are read separately; any value the driver
+  won't report shows as "--" while the others still update.
 - Nothing is read while the widget is hidden.
 
 ## Requirements on the PC
