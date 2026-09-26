@@ -202,7 +202,7 @@ fn main() {
             fonts: Fonts::new(dpi),
             settings,
             autostart: settings::autostart_enabled(),
-            tray_icon: make_tray_icon(),
+            tray_icon: load_tray_icon(dpi),
             cpu_name: sensors::cpu_name(),
             cpu_load: sensors::CpuLoad::default(),
             cpu_temp_sensor: pawnio::IntelTemp::open(),
@@ -631,44 +631,9 @@ unsafe fn show_menu(hwnd: HWND) {
     }
 }
 
-/// 32x32 bar-chart icon drawn in code, so no .ico file is needed.
-unsafe fn make_tray_icon() -> HICON {
-    const N: usize = 32;
-    let mut pixels = vec![0u32; N * N]; // ARGB, top-down
-    let mut rect = |x0: usize, y0: usize, x1: usize, y1: usize, argb: u32| {
-        for y in y0..y1 {
-            for x in x0..x1 {
-                pixels[y * N + x] = argb;
-            }
-        }
-    };
-    rect(1, 1, 31, 31, 0xFF18_1A1F);
-    rect(5, 14, 11, 27, 0xFF4C_C2FF);
-    rect(13, 6, 19, 27, 0xFF7E_E787);
-    rect(21, 10, 27, 27, 0xFFD2_A8FF);
-
-    let mut bmi: BITMAPINFO = zeroed();
-    bmi.bmiHeader = BITMAPINFOHEADER {
-        biSize: size_of::<BITMAPINFOHEADER>() as u32,
-        biWidth: N as i32,
-        biHeight: -(N as i32),
-        biPlanes: 1,
-        biBitCount: 32,
-        biCompression: BI_RGB,
-        ..zeroed()
-    };
-    let mut bits: *mut core::ffi::c_void = null_mut();
-    let screen = GetDC(null_mut());
-    let color = CreateDIBSection(screen, &bmi, DIB_RGB_COLORS, &mut bits, null_mut(), 0);
-    ReleaseDC(null_mut(), screen);
-    if color.is_null() || bits.is_null() {
-        return LoadIconW(null_mut(), IDI_APPLICATION);
-    }
-    std::ptr::copy_nonoverlapping(pixels.as_ptr(), bits.cast::<u32>(), N * N);
-    let mask = CreateBitmap(N as i32, N as i32, 1, 1, null());
-    let info = ICONINFO { fIcon: 1, xHotspot: 0, yHotspot: 0, hbmMask: mask, hbmColor: color };
-    let icon = CreateIconIndirect(&info);
-    DeleteObject(color);
-    DeleteObject(mask);
-    icon
+/// The app icon embedded from assets/syswidget.ico, at the tray's size for this DPI.
+unsafe fn load_tray_icon(dpi: u32) -> HICON {
+    let size = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
+    let icon = LoadImageW(GetModuleHandleW(null()), 1 as *const u16, IMAGE_ICON, size, size, LR_DEFAULTCOLOR);
+    if icon.is_null() { LoadIconW(null_mut(), IDI_APPLICATION) } else { icon as HICON }
 }

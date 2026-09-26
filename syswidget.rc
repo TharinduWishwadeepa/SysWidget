@@ -1,0 +1,26 @@
+// Windows resources: app icon, manifest and version info (shown in file Properties and UAC).
+1 ICON "assets/syswidget.ico"
+1 24 "assets/app.manifest"
+
+1 VERSIONINFO
+FILEVERSION 2,1,0,0
+PRODUCTVERSION 2,1,0,0
+FILEOS 0x40004
+FILETYPE 0x1
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "FileDescription", "SysWidget"
+      VALUE "ProductName", "SysWidget"
+      VALUE "FileVersion", "2.1.0"
+      VALUE "ProductVersion", "2.1.0"
+      VALUE "OriginalFilename", "SysWidget.exe"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

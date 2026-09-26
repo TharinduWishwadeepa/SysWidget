@@ -1,6 +1,6 @@
 [package]
 name = "syswidget"
-version = "2.0.0"
+version = "2.1.0"
 edition = "2021"
 
 [[bin]]
@@ -26,7 +26,7 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [build-dependencies]
-embed-manifest = "1"
+embed-resource = "3"
 
 [profile.release]
 opt-level = "s"

@@ -47,4 +47,5 @@ Windows SmartScreen may warn because the exe isn't signed: More info -> Run anyw
 - `src/pawnio.rs` - Intel CPU package temperature via PawnIO
 - `src/nvml.rs` - NVIDIA GPU via NVML
 - `src/settings.rs` - saved settings and the start-with-Windows task
+- `syswidget.rc`, `assets/` - app icon, manifest (run as admin, DPI, heap) and version info
 - `pawnio/IntelMSR.bin` - signed PawnIO module (LGPL-2.1, see `pawnio/COPYING`)
