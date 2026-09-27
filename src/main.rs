@@ -47,6 +47,7 @@ const DETAIL_H: f32 = 20.0;
 const SECTION_GAP: f32 = 14.0;
 const HINT_H: f32 = 40.0;
 const EDGE_MARGIN: f32 = 12.0;
+const OPACITY: u8 = 0xEB; // matches the previous .NET widget's ~92% background alpha
 
 const fn rgb(r: u8, g: u8, b: u8) -> COLORREF {
     r as u32 | (g as u32) << 8 | (b as u32) << 16
@@ -170,7 +171,7 @@ fn main() {
         RegisterClassExW(&wc);
 
         let settings = settings::Settings::load();
-        let ex_style = WS_EX_TOOLWINDOW | if settings.topmost { WS_EX_TOPMOST } else { 0 };
+        let ex_style = WS_EX_TOOLWINDOW | WS_EX_LAYERED | if settings.topmost { WS_EX_TOPMOST } else { 0 };
         let hwnd = CreateWindowExW(
             ex_style,
             class.as_ptr(),
@@ -195,6 +196,7 @@ fn main() {
         let border = BORDER;
         DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR as _, (&border as *const u32).cast(), 4);
 
+        SetLayeredWindowAttributes(hwnd, 0, OPACITY, LWA_ALPHA);
         let dpi = GetDpiForWindow(hwnd);
         let saved_pos = settings.pos;
         let state = State {
@@ -613,7 +615,8 @@ unsafe fn show_menu(hwnd: HWND) {
             let now = settings::autostart_enabled();
             with(|st| st.autostart = now);
             if let Err(e) = result {
-                MessageBoxW(hwnd, wide(&e).as_ptr(), wide("SysWidget").as_ptr(), MB_OK | MB_ICONWARNING);
+                let msg = format!("Could not update the startup task:\n\n{e}");
+                MessageBoxW(hwnd, wide(&msg).as_ptr(), wide("SysWidget").as_ptr(), MB_OK | MB_ICONWARNING);
             }
         }
         ID_RESET => {

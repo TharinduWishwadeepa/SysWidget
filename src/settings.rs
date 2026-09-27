@@ -1,7 +1,7 @@
 //! Position / options in HKCU\Software\SysWidget, and the start-with-Windows task.
 
 use std::os::windows::process::CommandExt;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::ptr::{null, null_mut};
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::System::Registry::{
@@ -79,11 +79,11 @@ fn set_dword(name: &str, value: u32) {
 // so this is a Task Scheduler logon task with highest privileges instead.
 
 pub fn autostart_enabled() -> bool {
-    schtasks(&["/Query", "/TN", TASK_NAME])
+    schtasks(&["/Query", "/TN", TASK_NAME]).is_ok()
 }
 
 pub fn disable_autostart() {
-    schtasks(&["/Delete", "/F", "/TN", TASK_NAME]);
+    let _ = schtasks(&["/Delete", "/F", "/TN", TASK_NAME]);
 }
 
 pub fn enable_autostart() -> Result<(), String> {
@@ -133,20 +133,40 @@ pub fn enable_autostart() -> Result<(), String> {
     let mut bytes = vec![0xFF, 0xFE];
     bytes.extend(xml.encode_utf16().flat_map(u16::to_le_bytes));
     let path = std::env::temp_dir().join("SysWidget-task.xml");
-    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
-    let ok = schtasks(&["/Create", "/F", "/TN", TASK_NAME, "/XML", &path.to_string_lossy()]);
+    std::fs::write(&path, bytes).map_err(|e| format!("Could not write {}: {e}", path.display()))?;
+    let result = schtasks(&["/Create", "/F", "/TN", TASK_NAME, "/XML", &path.to_string_lossy()]);
     let _ = std::fs::remove_file(&path);
-    ok.then_some(()).ok_or_else(|| "Could not create the startup task (schtasks failed).".to_string())
+    result.map(|_| ())
 }
 
-fn schtasks(args: &[&str]) -> bool {
-    Command::new("schtasks.exe")
+/// Runs schtasks.exe and returns its combined stdout+stderr text.
+/// Err carries that text (or the spawn error) so the caller can show the real reason,
+/// instead of a generic "failed" message with nothing to go on.
+fn schtasks(args: &[&str]) -> Result<String, String> {
+    let output = Command::new("schtasks.exe")
         .args(args)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
         .creation_flags(CREATE_NO_WINDOW)
-        .status()
-        .map_or(false, |s| s.success())
+        .output()
+        .map_err(|e| format!("Could not launch schtasks.exe: {e}"))?;
+
+    let mut text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let err = String::from_utf8_lossy(&output.stderr);
+    if !err.trim().is_empty() {
+        if !text.is_empty() {
+            text.push('\n');
+        }
+        text.push_str(err.trim());
+    }
+
+    if output.status.success() {
+        Ok(text)
+    } else {
+        Err(if text.is_empty() {
+            format!("schtasks.exe exited with {}", output.status)
+        } else {
+            text
+        })
+    }
 }
 
 fn xml_escape(s: &str) -> String {
